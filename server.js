@@ -1,40 +1,77 @@
-import express from "express";
+let display = document.getElementById("display");
+let historyList = document.getElementById("history");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-// serve frontend
-app.use(express.static("public"));
-
-// API for calculation
-app.get("/api/calc", (req, res) => {
-  const { a, b, op } = req.query;
-
-  const num1 = parseFloat(a);
-  const num2 = parseFloat(b);
-
-  let result;
-
-  switch (op) {
-    case "add":
-      result = num1 + num2;
-      break;
-    case "sub":
-      result = num1 - num2;
-      break;
-    case "mul":
-      result = num1 * num2;
-      break;
-    case "div":
-      result = num2 !== 0 ? num1 / num2 : "Cannot divide by 0";
-      break;
-    default:
-      return res.json({ error: "Invalid operation" });
+function append(value) {
+  if (display.value === "0") {
+    display.value = value;
+  } else {
+    display.value += value;
   }
+}
 
-  res.json({ result });
-});
+function clearDisplay() {
+  display.value = "";
+}
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+async function calculate() {
+  try {
+    let expression = display.value;
+
+    // prevent empty input
+    if (!expression) return;
+
+    let result = eval(expression);
+
+    display.value = result;
+
+    // SAVE to database
+    await fetch("/api/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        expression: expression,
+        result: result
+      })
+    });
+
+    // reload history
+    loadHistory();
+
+  } catch (err) {
+    display.value = "Error";
+  }
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch("/api/history");
+    const data = await res.json();
+
+    if (!historyList) return;
+
+    if (data.length === 0) {
+      historyList.innerHTML = "<li>No history yet</li>";
+      return;
+    }
+
+    historyList.innerHTML = data.map(item =>
+      `<li onclick="reuse('${item.result}')">
+        ${item.expression} = <b>${item.result}</b>
+      </li>`
+    ).join("");
+
+  } catch (err) {
+    console.error("History load error:", err);
+  }
+}
+
+function reuse(value) {
+  display.value = value;
+}
+
+window.onload = () => {
+  display.value = "0";
+  loadHistory();
+};
