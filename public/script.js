@@ -1,50 +1,77 @@
 let display = document.getElementById("display");
+let historyList = document.getElementById("history");
 
-// append value
 function append(value) {
-  display.value += value;
+  if (display.value === "0") {
+    display.value = value;
+  } else {
+    display.value += value;
+  }
 }
 
-// clear
 function clearDisplay() {
   display.value = "";
 }
 
-// calculate + save
 async function calculate() {
   try {
     let expression = display.value;
+
+    // prevent empty input
+    if (!expression) return;
+
     let result = eval(expression);
 
     display.value = result;
 
-    // SAVE to DB
+    // SAVE to database
     await fetch("/api/save", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ expression, result })
+      body: JSON.stringify({
+        expression: expression,
+        result: result
+      })
     });
 
+    // reload history
     loadHistory();
 
-  } catch {
+  } catch (err) {
     display.value = "Error";
   }
 }
 
-// load history
 async function loadHistory() {
-  const res = await fetch("/api/history");
-  const data = await res.json();
+  try {
+    const res = await fetch("/api/history");
+    const data = await res.json();
 
-  let list = document.getElementById("history");
+    if (!historyList) return;
 
-  list.innerHTML = data.map(item =>
-    `<li>${item.expression} = ${item.result}</li>`
-  ).join("");
+    if (data.length === 0) {
+      historyList.innerHTML = "<li>No history yet</li>";
+      return;
+    }
+
+    historyList.innerHTML = data.map(item =>
+      `<li onclick="reuse('${item.result}')">
+        ${item.expression} = <b>${item.result}</b>
+      </li>`
+    ).join("");
+
+  } catch (err) {
+    console.error("History load error:", err);
+  }
 }
 
-// load when page open
-loadHistory();
+function reuse(value) {
+  display.value = value;
+}
+
+window.onload = () => {
+  display.value = "0";
+  loadHistory();
+};

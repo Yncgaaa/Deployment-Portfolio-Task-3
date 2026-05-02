@@ -1,78 +1,53 @@
+import express from "express";
+import pkg from "pg";
 
-let display = document.getElementById("display");
-let historyList = document.getElementById("history");
+const { Pool } = pkg;
 
-function append(value) {
-  if (display.value === "0") {
-    display.value = value;
-  } else {
-    display.value += value;
-  }
-}
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-function clearDisplay() {
-  display.value = "";
-}
+// middleware
+app.use(express.static("public"));
+app.use(express.json());
 
-async function calculate() {
-  try {
-    let expression = display.value;
+// connect PostgreSQL (Render)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-    // prevent empty input
-    if (!expression) return;
+// create table if not exists
+(async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS history (
+      id SERIAL PRIMARY KEY,
+      expression TEXT,
+      result TEXT
+    );
+  `);
+})();
 
-    let result = eval(expression);
+// API: save calculation
+app.post("/api/save", async (req, res) => {
+  const { expression, result } = req.body;
 
-    display.value = result;
+  await pool.query(
+    "INSERT INTO history (expression, result) VALUES ($1, $2)",
+    [expression, result]
+  );
 
-    // SAVE to database
-    await fetch("/api/save", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        expression: expression,
-        result: result
-      })
-    });
+  res.json({ status: "saved" });
+});
 
-    // reload history
-    loadHistory();
+// API: get history
+app.get("/api/history", async (req, res) => {
+  const data = await pool.query(
+    "SELECT * FROM history ORDER BY id DESC LIMIT 10"
+  );
 
-  } catch (err) {
-    display.value = "Error";
-  }
-}
+  res.json(data.rows);
+});
 
-async function loadHistory() {
-  try {
-    const res = await fetch("/api/history");
-    const data = await res.json();
-
-    if (!historyList) return;
-
-    if (data.length === 0) {
-      historyList.innerHTML = "<li>No history yet</li>";
-      return;
-    }
-
-    historyList.innerHTML = data.map(item =>
-      `<li onclick="reuse('${item.result}')">
-        ${item.expression} = <b>${item.result}</b>
-      </li>`
-    ).join("");
-
-  } catch (err) {
-    console.error("History load error:", err);
-  }
-}
-
-function reuse(value) {
-  display.value = value;
-}
-
-window.onload = () => {
-  display.value = "0";
-  loadHistory();
-};
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
