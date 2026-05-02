@@ -1,3 +1,4 @@
+
 let display = document.getElementById("display");
 let historyList = document.getElementById("history");
 
